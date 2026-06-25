@@ -4,6 +4,31 @@ use crate::npm::NpmLs;
 
 mod npm;
 
+/// Known dependencies that are only used for building projects
+const DEP_BUILD_ALLOW_LIST: &[&str] = &[
+    // TODO: support wildcards
+    "@types/react",
+    "@types/react-dom",
+    "@typescript-eslint/eslint-plugin",
+    "esbuild-wasm",
+    "eslint",
+    "eslint-config-standard",
+    "eslint-config-standard-jsx",
+    "eslint-config-standard-react",
+    "eslint-plugin-import",
+    "eslint-plugin-node",
+    "eslint-plugin-promise",
+    "eslint-plugin-react",
+    "eslint-plugin-react-hooks",
+    "qunit",
+    "stylelint",
+    "stylelint-config-recommended-scss",
+    "stylelint-config-standard",
+    "stylelint-config-standard-scss",
+    "stylelint-formatter-pretty",
+    "typescript",
+];
+
 fn main() {
     let args: Vec<String> = args().collect();
     if args.len() < 2 {
@@ -12,18 +37,33 @@ fn main() {
     }
 
     let npm_ls = NpmLs::new(&args[1]);
-    println!("Depedency tree for '{}':", args[1]);
-    println!("{npm_ls:#?}");
+    // println!("Depedency tree for '{}':", args[1]);
+    // println!("{npm_ls:#?}");
+    println!("Dependency info for '{}':\n", args[1]);
 
-    println!("Used by following project dependenies:");
+    let mut all_builds = true;
+    println!("Used by following project dependencies:");
     for dep in npm_ls.top_level_deps() {
-        println!("\t{dep}");
+        print!("\t{dep}");
+        if DEP_BUILD_ALLOW_LIST.contains(&dep) {
+            print!(" (known build dependency)")
+        } else {
+            all_builds = false;
+        }
+        println!();
     }
 
     println!();
     if npm_ls.is_top_level_dep() {
-        println!("Depedency is a direct dependency");
+        println!("Dependency is a direct dependency");
     } else {
-        println!("Depedency is NOT a direct dependency");
+        println!("Dependency is NOT a direct dependency");
+    }
+
+    println!();
+    if all_builds {
+        println!("All dependencies are known build dependencies");
+    } else {
+        println!("All dependencies are NOT known build dependencies");
     }
 }
