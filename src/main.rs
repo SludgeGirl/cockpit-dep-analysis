@@ -1,7 +1,8 @@
 use std::{env::args, process::exit};
 
-use crate::npm::NpmLs;
+use crate::{imports::ImportAnalyzer, npm::NpmLs};
 
+mod imports;
 mod npm;
 
 /// Known dependencies that are only used for building projects
@@ -65,5 +66,10 @@ fn main() {
         println!("All dependencies are known build dependencies");
     } else {
         println!("All dependencies are NOT known build dependencies");
+    }
+
+    if args.len() >= 3 {
+        let analysis = ImportAnalyzer::new(&args[2]);
+        analysis.analyze("build.js");
     }
 }

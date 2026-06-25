@@ -1,0 +1,193 @@
+use std::fs;
+use std::path::{Path, PathBuf};
+
+use oxc::allocator::Allocator;
+use oxc::ast::ast::{
+    Argument, Expression, ImportDeclaration, StaticMemberExpression, StringLiteral,
+    VariableDeclaration,
+};
+use oxc::parser::{ParseOptions, Parser};
+use oxc::span::SourceType;
+
+use oxc_resolver::{
+    ResolveOptions, Resolver, TsconfigDiscovery, TsconfigOptions, TsconfigReferences,
+};
+
+struct ImportResolver {
+    root: PathBuf,
+    resolver: Resolver,
+}
+
+impl ImportResolver {
+    fn new<P: AsRef<Path>>(path: P) -> Self {
+        let path = path.as_ref();
+        let root = PathBuf::from(path).canonicalize().unwrap();
+        let mut ts_conf = root.clone();
+        ts_conf.push("tsconfig.json");
+
+        let options = ResolveOptions {
+            // XXX: do any of these matter when we have ts-config.json?
+            // alias_fields: vec![vec!["browser".into()]],
+            // alias: vec![("asdf".into(), vec![AliasValue::from("./test.js")])],
+            // extensions: vec![".js".into(), ".ts".into()],
+            // extension_alias: vec![(".js".into(), vec![".ts".into(), ".js".into()])],
+            // // ESM
+            // condition_names: vec!["node".into(), "import".into()],
+            // CJS
+            // condition_names: vec!["node".into(), "require".into()],
+            tsconfig: Some(TsconfigDiscovery::Manual(TsconfigOptions {
+                config_file: ts_conf,
+                references: TsconfigReferences::Auto,
+            })),
+            ..ResolveOptions::default()
+        };
+
+        let resolver = Resolver::new(options);
+        Self { root, resolver }
+    }
+
+    fn resolve_import_path(&self, import: &str) -> String {
+        let resolved = self.resolver.resolve(&self.root, import).unwrap();
+        resolved.full_path().to_string_lossy().to_string()
+    }
+}
+
+struct ImportParser {}
+
+impl ImportParser {
+    fn handle_import_decl<'a>(decl: &'a ImportDeclaration) -> &'a StringLiteral<'a> {
+        // only sources now, rest later
+        &decl.source
+    }
+
+    fn handle_var_decl_static_import<'a>(
+        import: &'a StaticMemberExpression,
+    ) -> Vec<&'a StringLiteral<'a>> {
+        let mut stat = import;
+        while let Expression::StaticMemberExpression(inner) = &stat.object {
+            stat = inner;
+        }
+        let expr = stat.object.without_parentheses();
+        if let Expression::AwaitExpression(wait) = expr
+            && let Expression::ImportExpression(import) = &wait.argument
+        {
+            match &import.source {
+                Expression::StringLiteral(arg) => {
+                    return vec![arg];
+                }
+                Expression::ConditionalExpression(cond) => {
+                    if let (Expression::StringLiteral(first), Expression::StringLiteral(second)) =
+                        (&cond.consequent, &cond.alternate)
+                    {
+                        return vec![first, second];
+                    }
+                }
+                imp => todo!("Implement import exporession argument\n{imp:#?}"),
+            }
+        }
+
+        vec![]
+    }
+
+    /// Checking for `const foo = require("bar");
+    fn handle_var_decl<'a>(decl: &'a VariableDeclaration) -> Vec<&'a StringLiteral<'a>> {
+        if let Some(decl) = decl.declarations.first() {
+            if let Some(Expression::CallExpression(init_call)) = &decl.init {
+                if let Expression::StaticMemberExpression(ident) = &init_call.callee {
+                    return Self::handle_var_decl_static_import(ident);
+                }
+                let is_require = if let Expression::Identifier(ident) = &init_call.callee {
+                    ident.name == "require"
+                } else {
+                    false
+                };
+
+                if is_require
+                    && let Some(Argument::StringLiteral(arg)) = init_call.arguments.first()
+                {
+                    return vec![arg];
+                }
+            }
+
+            // const esbuild = (await import(useWasm ? 'esbuild-wasm' : 'esbuild')).default;
+            // and the like
+            if let Some(Expression::StaticMemberExpression(stat_mem)) = &decl.init {
+                return Self::handle_var_decl_static_import(stat_mem);
+            }
+        }
+
+        vec![]
+    }
+
+    fn parse<P: AsRef<Path>>(path: P) -> Vec<String> {
+        let mut imports: Vec<String> = Vec::new();
+
+        let path = path.as_ref();
+        let source_text = fs::read_to_string(path).unwrap();
+        let source_type = SourceType::from_path(path).unwrap();
+
+        // Parse the source code
+        let allocator = Allocator::default();
+        let ret = Parser::new(&allocator, &source_text, source_type)
+            .with_options(ParseOptions {
+                parse_regular_expression: true,
+                ..ParseOptions::default()
+            })
+            .parse();
+
+        for stmt in &ret.program.body {
+            match stmt {
+                oxc::ast::ast::Statement::ImportDeclaration(import) => {
+                    imports.push(Self::handle_import_decl(import).to_string());
+                }
+                oxc::ast::ast::Statement::VariableDeclaration(var) => {
+                    imports.extend(
+                        Self::handle_var_decl(var)
+                            .iter()
+                            .map(|import| import.to_string()),
+                    );
+                }
+                oxc::ast::ast::Statement::TSImportEqualsDeclaration(_) => {
+                    todo!("Handle TSImportEqualsDelaration")
+                }
+                // s => todo!("Unhandeled stmt: {s:#?}"),
+                _ => {}
+            }
+        }
+
+        imports
+    }
+}
+
+pub struct ImportAnalyzer {
+    root: PathBuf,
+    resolver: ImportResolver,
+}
+
+impl ImportAnalyzer {
+    pub fn new<P: AsRef<Path>>(root: P) -> Self {
+        let root = root.as_ref();
+        let root = root.canonicalize().unwrap();
+        Self {
+            resolver: ImportResolver::new(&root),
+            root,
+        }
+    }
+
+    pub fn analyze<P: AsRef<Path>>(&self, file: P) {
+        let mut full_path = self.root.clone();
+        full_path.push(file);
+        let imports = ImportParser::parse(full_path);
+        // println!("Found imports:");
+        println!("{imports:#?}");
+        for import in &imports {
+            // internal node things are safe to ignore
+            if import.starts_with("node:") {
+                continue;
+            }
+
+            let resolv = self.resolver.resolve_import_path(import);
+            println!("{import} -> {resolv}");
+        }
+    }
+}
