@@ -4,5 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+# TODO: only import the oxc libraries we need
+oxc = { version = "0.116.0", features = ["full", "serialize"] }
+oxc_resolver = "11.21.3"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.150"
