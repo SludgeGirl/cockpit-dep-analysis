@@ -72,7 +72,7 @@ fn run_npm(args: &args::Args) -> bool {
 
 fn run_import(args: &args::Args) -> bool {
     println!();
-    let analysis = ImportAnalyzer::new(args.path(), args.dependency());
+    let mut analysis = ImportAnalyzer::new(args.path(), args.dependency());
     let founds = analysis.analyze("build.js");
 
     if founds.is_empty() {

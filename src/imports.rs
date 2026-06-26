@@ -202,6 +202,7 @@ pub struct ImportAnalyzer {
     root: PathBuf,
     resolver: ImportResolver,
     dependency: String,
+    cache: HashSet<PathBuf>,
 }
 
 impl ImportAnalyzer {
@@ -212,11 +213,19 @@ impl ImportAnalyzer {
             dependency: dependency.into(),
             resolver: ImportResolver::new(&root),
             root,
+            cache: HashSet::new(),
         }
     }
 
-    pub fn analyze_imports<P: AsRef<Path>>(&self, file: P, found: &mut Vec<String>) {
+    pub fn analyze_imports<P: AsRef<Path>>(&mut self, file: P, found: &mut Vec<String>) {
         let file = file.as_ref();
+
+        if self.cache.contains(file) {
+            return;
+        } else {
+            self.cache.insert(file.to_path_buf());
+        }
+
         let imports = ImportParser::parse(file);
 
         for import in &imports {
@@ -231,13 +240,18 @@ impl ImportAnalyzer {
 
             let full_import = ImportResolver::format_relative(file, import);
             let resolv = self.resolver.resolve_import_path(&full_import);
+            // if import.contains("react-core") {
+            //     println!("{} -> {import}", file.to_string_lossy());
+            //     println!("\t{resolv:?}");
+            // }
+
             if let Some(resolv) = resolv {
                 self.analyze_imports(resolv, found);
             }
         }
     }
 
-    pub fn analyze<P: AsRef<Path>>(&self, file: P) -> Vec<String> {
+    pub fn analyze<P: AsRef<Path>>(&mut self, file: P) -> Vec<String> {
         let mut found_imports = Vec::new();
         let mut full_path = self.root.clone();
         full_path.push(file);
