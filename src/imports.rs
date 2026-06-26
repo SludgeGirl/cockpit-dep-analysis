@@ -30,8 +30,12 @@ impl ImportResolver {
             // XXX: do any of these matter when we have ts-config.json?
             // alias_fields: vec![vec!["browser".into()]],
             // alias: vec![("asdf".into(), vec![AliasValue::from("./test.js")])],
+            extensions: vec![".js".into(), ".ts".into(), ".jsx".into(), ".tsx".into()],
             // extensions: vec![".js".into(), ".ts".into()],
-            // extension_alias: vec![(".js".into(), vec![".ts".into(), ".js".into()])],
+            extension_alias: vec![
+                (".js".into(), vec![".ts".into(), ".js".into()]),
+                (".jsx".into(), vec![".tsx".into(), ".jsx".into()]),
+            ],
             // // ESM
             // condition_names: vec!["node".into(), "import".into()],
             // CJS
@@ -144,6 +148,11 @@ impl ImportParser {
         let mut imports: Vec<String> = Vec::new();
 
         let path = path.as_ref();
+        // ignore css and scss files
+        if path.to_string_lossy().ends_with("css") {
+            return imports;
+        }
+
         let source_text = fs::read_to_string(path).unwrap();
         let source_type = SourceType::from_path(path).unwrap();
 

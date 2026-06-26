@@ -80,5 +80,15 @@ fn main() {
                 println!("\t{found}");
             }
         }
+
+        let founds = analysis.analyze("src/index.tsx");
+        if founds.is_empty() {
+            println!("Dependency is not used by the application");
+        } else {
+            println!("Dependency is used by application in following paths");
+            for found in founds {
+                println!("\t{found}");
+            }
+        }
     }
 }
