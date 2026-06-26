@@ -81,6 +81,7 @@ fn main() {
             }
         }
 
+        println!();
         let founds = analysis.analyze("src/index.tsx");
         if founds.is_empty() {
             println!("Dependency is not used by the application");

@@ -224,7 +224,7 @@ impl ImportAnalyzer {
                 continue;
             }
 
-            if self.dependency == *import {
+            if self.dependency == *import || import.starts_with(&format!("{}/", self.dependency)) {
                 found.push(file.to_string_lossy().to_string());
             }
 
