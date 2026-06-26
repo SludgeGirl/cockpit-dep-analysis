@@ -10,7 +10,8 @@ use oxc::parser::{ParseOptions, Parser};
 use oxc::span::SourceType;
 
 use oxc_resolver::{
-    ResolveOptions, Resolver, TsconfigDiscovery, TsconfigOptions, TsconfigReferences,
+    EnforceExtension, ResolveError, ResolveOptions, Resolver, TsconfigDiscovery, TsconfigOptions,
+    TsconfigReferences,
 };
 
 struct ImportResolver {
@@ -35,6 +36,8 @@ impl ImportResolver {
             // condition_names: vec!["node".into(), "import".into()],
             // CJS
             // condition_names: vec!["node".into(), "require".into()],
+            builtin_modules: true,
+            enforce_extension: EnforceExtension::Disabled,
             tsconfig: Some(TsconfigDiscovery::Manual(TsconfigOptions {
                 config_file: ts_conf,
                 references: TsconfigReferences::Auto,
@@ -46,9 +49,27 @@ impl ImportResolver {
         Self { root, resolver }
     }
 
-    fn resolve_import_path(&self, import: &str) -> String {
-        let resolved = self.resolver.resolve(&self.root, import).unwrap();
-        resolved.full_path().to_string_lossy().to_string()
+    fn format_relative(file: &Path, import: &str) -> String {
+        if import.starts_with('.') {
+            let file = PathBuf::from(file);
+            let mut root = file.parent().unwrap().to_path_buf();
+            root.push(import);
+            root.to_string_lossy().to_string()
+        } else {
+            import.to_string()
+        }
+    }
+
+    // Resolve import paths, ignoring buildin modules
+    fn resolve_import_path(&self, import: &str) -> Option<String> {
+        match self.resolver.resolve(&self.root, import) {
+            Ok(resolved) => Some(resolved.full_path().to_string_lossy().to_string()),
+            Err(ResolveError::Builtin {
+                resolved: _,
+                is_runtime_module: _,
+            }) => None,
+            Err(err) => panic!("{err:#?}"),
+        }
     }
 }
 
@@ -174,11 +195,15 @@ impl ImportAnalyzer {
         }
     }
 
-    pub fn analyze<P: AsRef<Path>>(&self, file: P) {
-        let mut full_path = self.root.clone();
-        full_path.push(file);
-        let imports = ImportParser::parse(full_path);
-        // println!("Found imports:");
+    pub fn analyze_imports<P: AsRef<Path>>(&self, file: P, depth: u32) {
+        let file = file.as_ref();
+        println!("analyzing file: {}", file.to_string_lossy());
+        if depth > 1 {
+            return;
+        }
+
+        let imports = ImportParser::parse(file);
+        println!("Found imports:");
         println!("{imports:#?}");
         for import in &imports {
             // internal node things are safe to ignore
@@ -186,8 +211,19 @@ impl ImportAnalyzer {
                 continue;
             }
 
-            let resolv = self.resolver.resolve_import_path(import);
-            println!("{import} -> {resolv}");
+            let full_import = ImportResolver::format_relative(file, import);
+            let resolv = self.resolver.resolve_import_path(&full_import);
+            if let Some(resolv) = resolv {
+                println!("import paths:");
+                println!("{import} -> {resolv}");
+                self.analyze_imports(resolv, depth + 1);
+            }
         }
+    }
+
+    pub fn analyze<P: AsRef<Path>>(&self, file: P) {
+        let mut full_path = self.root.clone();
+        full_path.push(file);
+        self.analyze_imports(full_path, 0);
     }
 }
