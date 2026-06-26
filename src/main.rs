@@ -31,13 +31,8 @@ const DEP_BUILD_ALLOW_LIST: &[&str] = &[
     "typescript",
 ];
 
-fn main() {
-    let args = args::Args::parse();
-
+fn run_npm(args: &args::Args) -> bool {
     let npm_ls = NpmLs::new(args.dependency());
-    // println!("Depedency tree for '{}':", args[1]);
-    // println!("{npm_ls:#?}");
-    println!("Dependency info for '{}':\n", args.dependency());
 
     let mut all_builds = true;
     println!("Used by following project dependencies:");
@@ -61,32 +56,63 @@ fn main() {
     println!();
     if all_builds {
         println!("All dependencies are known build dependencies");
+        true
     } else {
         println!("All dependencies are NOT known build dependencies");
+        false
+    }
+}
+
+fn run_import(args: &args::Args) -> bool {
+    println!();
+    let analysis = ImportAnalyzer::new(args.path(), args.dependency());
+    let founds = analysis.analyze("build.js");
+
+    if founds.is_empty() {
+        println!("Dependency is not used by build.js");
+    } else {
+        println!("Dependency is used by build.js in following paths");
+        for found in founds {
+            println!("\t{found}");
+        }
+    };
+
+    println!();
+    let founds = analysis.analyze("src/index.tsx");
+    if founds.is_empty() {
+        println!("Dependency is not used by the application");
+        false
+    } else {
+        println!("Dependency is used by application in following paths");
+        for found in founds {
+            println!("\t{found}");
+        }
+        true
+    }
+}
+
+fn main() {
+    let args = args::Args::parse();
+    println!("Dependency info for '{}':\n", args.dependency());
+
+    let build_only = run_npm(&args);
+
+    if build_only {
+        println!("\n\n");
+        println!("Dependency is only used by known build dependencies. No need to update");
+        return;
     }
 
-    if !args.no_imports() {
-        println!();
-        let analysis = ImportAnalyzer::new(args.path(), args.dependency());
-        let founds = analysis.analyze("build.js");
-        if founds.is_empty() {
-            println!("Dependency is not used by build.js");
-        } else {
-            println!("Dependency is used by build.js in following paths");
-            for found in founds {
-                println!("\t{found}");
-            }
-        }
+    let app_used = if !args.no_imports() {
+        run_import(&args)
+    } else {
+        false
+    };
 
-        println!();
-        let founds = analysis.analyze("src/index.tsx");
-        if founds.is_empty() {
-            println!("Dependency is not used by the application");
-        } else {
-            println!("Dependency is used by application in following paths");
-            for found in founds {
-                println!("\t{found}");
-            }
-        }
+    println!("\n\n");
+    if !app_used {
+        println!("Dependency is not used in runtime. No need to update");
+    } else {
+        println!("Dependency is used in runtime. Please update it");
     }
 }
