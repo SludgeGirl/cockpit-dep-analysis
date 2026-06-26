@@ -69,7 +69,16 @@ fn main() {
     }
 
     if args.len() >= 3 {
-        let analysis = ImportAnalyzer::new(&args[2]);
-        analysis.analyze("build.js");
+        println!();
+        let analysis = ImportAnalyzer::new(&args[2], &args[1]);
+        let founds = analysis.analyze("build.js");
+        if founds.is_empty() {
+            println!("Dependency is not used by build.js");
+        } else {
+            println!("Dependency is used by build.js in following paths");
+            for found in founds {
+                println!("\t{found}");
+            }
+        }
     }
 }

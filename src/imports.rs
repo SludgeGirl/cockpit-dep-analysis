@@ -183,47 +183,47 @@ impl ImportParser {
 pub struct ImportAnalyzer {
     root: PathBuf,
     resolver: ImportResolver,
+    dependency: String,
 }
 
 impl ImportAnalyzer {
-    pub fn new<P: AsRef<Path>>(root: P) -> Self {
+    pub fn new<P: AsRef<Path>>(root: P, dependency: &str) -> Self {
         let root = root.as_ref();
         let root = root.canonicalize().unwrap();
         Self {
+            dependency: dependency.into(),
             resolver: ImportResolver::new(&root),
             root,
         }
     }
 
-    pub fn analyze_imports<P: AsRef<Path>>(&self, file: P, depth: u32) {
+    pub fn analyze_imports<P: AsRef<Path>>(&self, file: P, found: &mut Vec<String>) {
         let file = file.as_ref();
-        println!("analyzing file: {}", file.to_string_lossy());
-        if depth > 1 {
-            return;
-        }
-
         let imports = ImportParser::parse(file);
-        println!("Found imports:");
-        println!("{imports:#?}");
+
         for import in &imports {
             // internal node things are safe to ignore
             if import.starts_with("node:") {
                 continue;
             }
 
+            if self.dependency == *import {
+                found.push(file.to_string_lossy().to_string());
+            }
+
             let full_import = ImportResolver::format_relative(file, import);
             let resolv = self.resolver.resolve_import_path(&full_import);
             if let Some(resolv) = resolv {
-                println!("import paths:");
-                println!("{import} -> {resolv}");
-                self.analyze_imports(resolv, depth + 1);
+                self.analyze_imports(resolv, found);
             }
         }
     }
 
-    pub fn analyze<P: AsRef<Path>>(&self, file: P) {
+    pub fn analyze<P: AsRef<Path>>(&self, file: P) -> Vec<String> {
+        let mut found_imports = Vec::new();
         let mut full_path = self.root.clone();
         full_path.push(file);
-        self.analyze_imports(full_path, 0);
+        self.analyze_imports(full_path, &mut found_imports);
+        found_imports
     }
 }
