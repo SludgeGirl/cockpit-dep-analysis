@@ -12,13 +12,19 @@ pub struct NpmDependency {
 
 /// Output of "npm ls --package-lock-only --json <package>"
 #[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct NpmLsOutput {
+    name: String,
+    dependencies: Option<HashMap<String, NpmDependency>>,
+}
+
+#[derive(Debug, Clone)]
 pub struct NpmLs {
     name: String,
     dependencies: HashMap<String, NpmDependency>,
 }
 
 impl NpmLs {
-    pub fn new(name: &str) -> Self {
+    pub fn new(name: &str) -> Option<Self> {
         let ls_output = Command::new("npm")
             .arg("ls")
             .arg("--package-lock-only")
@@ -28,9 +34,11 @@ impl NpmLs {
             .expect("failed to run npm ls")
             .stdout;
 
-        let mut ls_json: NpmLs = serde_json::from_slice(&ls_output).unwrap();
-        ls_json.name = name.to_string();
-        ls_json
+        let ls_json: NpmLsOutput = serde_json::from_slice(&ls_output).unwrap();
+        ls_json.dependencies.map(|dependencies| Self {
+            name: name.to_string(),
+            dependencies,
+        })
     }
 
     pub fn top_level_deps(&self) -> Vec<&str> {

@@ -1,3 +1,5 @@
+use std::process::exit;
+
 use clap::Parser;
 
 use crate::{imports::ImportAnalyzer, npm::NpmLs};
@@ -32,7 +34,12 @@ const DEP_BUILD_ALLOW_LIST: &[&str] = &[
 ];
 
 fn run_npm(args: &args::Args) -> bool {
-    let npm_ls = NpmLs::new(args.dependency());
+    let npm_ls = if let Some(npm) = NpmLs::new(args.dependency()) {
+        npm
+    } else {
+        println!("Dependency is not used by the project");
+        exit(0);
+    };
 
     let mut all_builds = true;
     println!("Used by following project dependencies:");
