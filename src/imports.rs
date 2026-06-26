@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -241,6 +242,12 @@ impl ImportAnalyzer {
         let mut full_path = self.root.clone();
         full_path.push(file);
         self.analyze_imports(full_path, &mut found_imports);
-        found_imports
+        // lazy way of removing duplicates
+        let set: HashSet<String> = HashSet::from_iter(found_imports);
+        let mut uniques: Vec<String> = set.into_iter().collect();
+        // HashSet is unordered so we need sort it before returning it
+        uniques.sort();
+        uniques.reverse();
+        uniques
     }
 }
