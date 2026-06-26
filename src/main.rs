@@ -1,7 +1,8 @@
-use std::{env::args, process::exit};
+use clap::Parser;
 
 use crate::{imports::ImportAnalyzer, npm::NpmLs};
 
+mod args;
 mod imports;
 mod npm;
 
@@ -31,16 +32,12 @@ const DEP_BUILD_ALLOW_LIST: &[&str] = &[
 ];
 
 fn main() {
-    let args: Vec<String> = args().collect();
-    if args.len() < 2 {
-        println!("Usage: {} <depedency name>", args[0]);
-        exit(0);
-    }
+    let args = args::Args::parse();
 
-    let npm_ls = NpmLs::new(&args[1]);
+    let npm_ls = NpmLs::new(args.dependency());
     // println!("Depedency tree for '{}':", args[1]);
     // println!("{npm_ls:#?}");
-    println!("Dependency info for '{}':\n", args[1]);
+    println!("Dependency info for '{}':\n", args.dependency());
 
     let mut all_builds = true;
     println!("Used by following project dependencies:");
@@ -68,9 +65,9 @@ fn main() {
         println!("All dependencies are NOT known build dependencies");
     }
 
-    if args.len() >= 3 {
+    if !args.no_imports() {
         println!();
-        let analysis = ImportAnalyzer::new(&args[2], &args[1]);
+        let analysis = ImportAnalyzer::new(args.path(), args.dependency());
         let founds = analysis.analyze("build.js");
         if founds.is_empty() {
             println!("Dependency is not used by build.js");
