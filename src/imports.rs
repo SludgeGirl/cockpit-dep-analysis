@@ -180,6 +180,14 @@ impl ImportParser {
                 oxc::ast::ast::Statement::TSImportEqualsDeclaration(_) => {
                     todo!("Handle TSImportEqualsDelaration")
                 }
+                oxc::ast::ast::Statement::ExportAllDeclaration(export) => {
+                    imports.push(export.source.to_string());
+                }
+                oxc::ast::ast::Statement::ExportNamedDeclaration(export) => {
+                    if let Some(source) = &export.source {
+                        imports.push(source.to_string());
+                    }
+                }
                 // s => todo!("Unhandeled stmt: {s:#?}"),
                 _ => {}
             }
