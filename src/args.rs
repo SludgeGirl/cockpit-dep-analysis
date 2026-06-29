@@ -14,6 +14,10 @@ pub struct Args {
 
     /// Name of the dependency you want to analyze
     dependency: String,
+
+    /// Print analysis information in json format
+    #[arg(short, long)]
+    json: bool,
 }
 
 impl Args {
@@ -27,5 +31,9 @@ impl Args {
 
     pub fn no_imports(&self) -> bool {
         self.no_imports
+    }
+
+    pub fn json(&self) -> bool {
+        self.json
     }
 }

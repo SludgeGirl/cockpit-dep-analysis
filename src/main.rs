@@ -200,5 +200,9 @@ fn main() {
         run_import(&args, &mut analysis);
     }
 
-    analysis.print(&args);
+    if args.json() {
+        println!("{}", serde_json::to_string(&analysis).unwrap());
+    } else {
+        analysis.print(&args);
+    }
 }
