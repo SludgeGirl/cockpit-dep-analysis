@@ -156,7 +156,10 @@ impl ImportParser {
 
         let path = path.as_ref();
         // ignore css and scss files
-        if path.to_string_lossy().ends_with("css") {
+        if path.to_string_lossy().ends_with("css")
+            // Also ignore python files
+            || path.extension().is_some_and(|ext| ext == "py")
+        {
             return imports;
         }
 
