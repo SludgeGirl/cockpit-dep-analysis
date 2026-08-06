@@ -31,14 +31,20 @@ impl ImportResolver {
             // XXX: do any of these matter when we have ts-config.json?
             // alias_fields: vec![vec!["browser".into()]],
             // alias: vec![("asdf".into(), vec![AliasValue::from("./test.js")])],
-            extensions: vec![".js".into(), ".ts".into(), ".jsx".into(), ".tsx".into()],
+            extensions: vec![
+                ".js".into(),
+                ".ts".into(),
+                ".jsx".into(),
+                ".tsx".into(),
+                ".d.ts".into(),
+            ],
             // extensions: vec![".js".into(), ".ts".into()],
             extension_alias: vec![
                 (".js".into(), vec![".ts".into(), ".js".into()]),
                 (".jsx".into(), vec![".tsx".into(), ".jsx".into()]),
             ],
             // // ESM
-            // condition_names: vec!["node".into(), "import".into()],
+            condition_names: vec!["node".into(), "import".into()],
             // CJS
             // condition_names: vec!["node".into(), "require".into()],
             builtin_modules: true,
