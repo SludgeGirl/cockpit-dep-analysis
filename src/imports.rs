@@ -4,8 +4,8 @@ use std::path::{Path, PathBuf};
 
 use oxc::allocator::Allocator;
 use oxc::ast::ast::{
-    Argument, Expression, ImportDeclaration, StaticMemberExpression, StringLiteral,
-    VariableDeclaration,
+    Argument, ArrayExpressionElement, BindingPattern, Expression, ImportDeclaration,
+    ObjectPropertyKind, StaticMemberExpression, StringLiteral, VariableDeclaration,
 };
 use oxc::parser::{ParseOptions, Parser};
 use oxc::span::SourceType;
@@ -40,7 +40,10 @@ impl ImportResolver {
             ],
             // extensions: vec![".js".into(), ".ts".into()],
             extension_alias: vec![
-                (".js".into(), vec![".ts".into(), ".js".into()]),
+                (
+                    ".js".into(),
+                    vec![".ts".into(), ".js".into(), ".tsx".into(), ".jsx".into()],
+                ),
                 (".jsx".into(), vec![".tsx".into(), ".jsx".into()]),
             ],
             // // ESM
@@ -159,6 +162,8 @@ impl ImportParser {
         if path.to_string_lossy().ends_with("css")
             // Also ignore python files
             || path.extension().is_some_and(|ext| ext == "py")
+            // And sh files
+            || path.extension().is_some_and(|ext| ext == "sh")
         {
             return imports;
         }
@@ -207,6 +212,110 @@ impl ImportParser {
     }
 }
 
+struct FilesEntriesParser {}
+
+impl FilesEntriesParser {
+    fn check_file_ext(entry: &str, ext: &str, rep: &str) -> Option<String> {
+        if entry.ends_with(ext) {
+            let replaced = entry.replace(ext, rep);
+            if fs::exists(&replaced).unwrap() {
+                return Some(replaced);
+            }
+        }
+
+        None
+    }
+
+    /// Some of the entries have for example .jsx when they have been updated to .tsx
+    fn validate_info_entry(entry: &str) -> String {
+        let full = format!("pkg/{entry}");
+        if fs::exists(&full).unwrap() {
+            return full;
+        }
+
+        if let Some(file) = Self::check_file_ext(&full, ".jsx", ".tsx") {
+            return file;
+        }
+        if let Some(file) = Self::check_file_ext(&full, ".js", ".ts") {
+            return file;
+        }
+        if let Some(file) = Self::check_file_ext(&full, ".tsx", ".jsx") {
+            return file;
+        }
+        if let Some(file) = Self::check_file_ext(&full, ".ts", ".js") {
+            return file;
+        }
+
+        panic!("file '{full}' doesn't exists")
+    }
+
+    fn parse_const_info_entries(expr: &Expression) -> Vec<String> {
+        let mut entries: Vec<String> = Vec::new();
+        match expr {
+            Expression::ArrayExpression(arr) => {
+                for elem in &arr.elements {
+                    if let ArrayExpressionElement::StringLiteral(lit) = &elem {
+                        // entries.push(format!("pkg/{}", lit.value.into_string()));
+                        entries.push(Self::validate_info_entry(lit.value.as_str()));
+                    }
+                }
+            }
+            _ => panic!("file.js info.entries is not initialized with an array"),
+        }
+
+        entries
+    }
+
+    fn parse_const_info_init(expr: &Expression) -> Vec<String> {
+        match expr {
+            Expression::ObjectExpression(obj) => {
+                for prop in &obj.properties {
+                    if let ObjectPropertyKind::ObjectProperty(objp) = prop
+                        && objp.key.name().is_some_and(|k| k == "entries")
+                    {
+                        return Self::parse_const_info_entries(&objp.value);
+                    }
+                }
+            }
+            _ => panic!("file.js info is not initialized with object"),
+        }
+
+        unreachable!("entries in file.js are not properly initialized");
+    }
+
+    fn parse_entries<P: AsRef<Path>>(path: P) -> Vec<String> {
+        let path = path.as_ref();
+        let source_text = fs::read_to_string(path).unwrap();
+        let source_type = SourceType::from_path(path).unwrap();
+
+        // Parse the source code
+        let allocator = Allocator::default();
+        let ret = Parser::new(&allocator, &source_text, source_type)
+            .with_options(ParseOptions {
+                parse_regular_expression: true,
+                ..ParseOptions::default()
+            })
+            .parse();
+
+        for stmt in &ret.program.body {
+            if let oxc::ast::ast::Statement::VariableDeclaration(var) = stmt {
+                for decl in &var.declarations {
+                    if let BindingPattern::BindingIdentifier(id) = &decl.id
+                        && id.name == "info"
+                    {
+                        return Self::parse_const_info_init(
+                            decl.init
+                                .as_ref()
+                                .expect("info variable is exepected to be initialized"),
+                        );
+                    }
+                }
+            }
+        }
+
+        vec![]
+    }
+}
 pub struct ImportAnalyzer {
     root: PathBuf,
     resolver: ImportResolver,
@@ -260,7 +369,7 @@ impl ImportAnalyzer {
         }
     }
 
-    pub fn analyze<P: AsRef<Path>>(&mut self, file: P) -> Vec<String> {
+    fn analyze<P: AsRef<Path>>(&mut self, file: P) -> Vec<String> {
         let mut found_imports = Vec::new();
         let mut full_path = self.root.clone();
         full_path.push(file);
@@ -272,5 +381,26 @@ impl ImportAnalyzer {
         uniques.sort();
         uniques.reverse();
         uniques
+    }
+
+    pub fn analyze_build(&mut self) -> Vec<String> {
+        self.analyze("build.js")
+    }
+
+    pub fn analyze_source(&mut self) -> Vec<String> {
+        let mut found = Vec::new();
+
+        // if files.js exists, this is likely the cockpit main project
+        let entries = if fs::exists("files.js").unwrap() {
+            FilesEntriesParser::parse_entries("files.js")
+        } else {
+            vec!["src/index.tsx".to_string()]
+        };
+
+        for entry in &entries {
+            found.extend(self.analyze(entry));
+        }
+
+        found
     }
 }

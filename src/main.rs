@@ -176,7 +176,7 @@ fn run_npm(args: &args::Args, analysis: &mut Analysis) {
 
 fn run_import(args: &args::Args, analysis_out: &mut Analysis) {
     let mut analysis = ImportAnalyzer::new(args.path(), args.dependency());
-    let founds = analysis.analyze("build.js");
+    let founds = analysis.analyze_build();
     analysis_out.build_js_imports = Some(founds.clone());
 
     if founds.is_empty() {
@@ -185,7 +185,7 @@ fn run_import(args: &args::Args, analysis_out: &mut Analysis) {
         analysis_out.is_build_js_dep = Some(true);
     };
 
-    let founds = analysis.analyze("src/index.tsx");
+    let founds = analysis.analyze_source();
     analysis_out.app_imports = Some(founds.clone());
     if founds.is_empty() {
         analysis_out.is_app_dep = Some(false);
