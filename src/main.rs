@@ -1,11 +1,13 @@
 use clap::Parser;
 use serde::{Deserialize, Serialize};
 
-use crate::{imports::ImportAnalyzer, npm::NpmLs};
+use crate::{imports::ImportAnalyzer, npm::NpmLs, obs::Obs};
 
 mod args;
 mod imports;
 mod npm;
+mod obs;
+mod util;
 
 /// Known dependencies that are only used for building projects
 const DEP_BUILD_ALLOW_LIST: &[&str] = &[
@@ -198,7 +200,13 @@ fn main() {
     let mut analysis = Analysis::default();
     run_npm(&args, &mut analysis);
 
-    if !args.no_imports() {
+    if !args.no_imports() && analysis.is_used && !analysis.is_build_only {
+        let obs = Obs::new(&args);
+        if obs.initialize_obs() {
+            vprintln!(args, "Analyzing obs project");
+        } else {
+            vprintln!(args, "Analyzing regular project");
+        }
         run_import(&args, &mut analysis);
     }
 

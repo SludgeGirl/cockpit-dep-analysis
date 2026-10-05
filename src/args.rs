@@ -18,6 +18,10 @@ pub struct Args {
     /// Print analysis information in json format
     #[arg(short, long)]
     json: bool,
+
+    /// Print verbose output to stderr
+    #[arg(short, long)]
+    verbose: bool,
 }
 
 impl Args {
@@ -35,5 +39,9 @@ impl Args {
 
     pub fn json(&self) -> bool {
         self.json
+    }
+
+    pub fn verbose(&self) -> bool {
+        self.verbose
     }
 }
