@@ -129,10 +129,11 @@ impl Analysis {
     }
 }
 
+#[allow(clippy::derivable_impls)]
 impl Default for Analysis {
     fn default() -> Self {
         Self {
-            update_recommended: true,
+            update_recommended: false,
             is_used: false,
             is_direct_dep: false,
             direct_deps: vec![],
@@ -188,6 +189,7 @@ fn run_import(args: &args::Args, analysis_out: &mut Analysis) {
         analysis_out.is_app_dep = Some(false);
     } else {
         analysis_out.is_app_dep = Some(true);
+        analysis_out.update_recommended = true;
     }
 }
 
